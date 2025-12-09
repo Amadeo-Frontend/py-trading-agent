@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "agno>=2.3.8",
+    "argon2-cffi>=25.1.0",
     "fastapi[standard]>=0.124.0",
     "google-genai>=1.54.0",
     "pandas>=2.3.3",
