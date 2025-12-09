@@ -11,20 +11,17 @@ from .models import User
 def init_admin() -> None:
     """
     Cria o usuário admin no banco se ainda não existir.
-    Usa as variáveis de ambiente ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME.
+    Usa as variáveis ADMIN_EMAIL, ADMIN_PASSWORD e ADMIN_NAME do .env.
     """
     if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD:
-        # se não configurou no .env, não faz nada
+        print("⚠️ ADMIN_EMAIL e ADMIN_PASSWORD não configurados — admin não será criado.")
         return
 
     db = SessionLocal()
     try:
-        existing = (
-            db.query(User)
-            .filter(User.email == settings.ADMIN_EMAIL)
-            .first()
-        )
+        existing = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if existing:
+            print("✔️ Admin já existe — ignorando seed.")
             return
 
         admin = User(
@@ -34,19 +31,23 @@ def init_admin() -> None:
             role="admin",
             is_active=True,
         )
+
         db.add(admin)
         db.commit()
+        print("🎉 Admin criado com sucesso no banco!")
+
     finally:
         db.close()
 
 
 def create_app() -> FastAPI:
-    # cria tabelas e garante admin
+    # Criar tabelas e ativar seed de admin
     Base.metadata.create_all(bind=engine)
     init_admin()
 
     app = FastAPI(title="Trading Agent Backend")
 
+    # CORS para Next.js
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.frontend_origins,
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Registrando rotas
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(chat.router)

@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.core.security import create_access_token
-
 
 from ..database import get_db
 from ..models import User
@@ -16,6 +14,10 @@ from ..core.security import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+# ----------------------------------------------
+# REGISTRO DE NOVO USUÁRIO
+# ----------------------------------------------
 @router.post("/register", response_model=UserRead, status_code=201)
 def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
@@ -35,24 +37,38 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
     return user
 
+
+# ----------------------------------------------
+# LOGIN (COMPATÍVEL COM NEXTAUTH)
+# ----------------------------------------------
 @router.post("/login", response_model=Token)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    # OAuth2PasswordRequestForm espera fields: username e password
+    # OAuth2PasswordRequestForm envia username e password
     user = db.query(User).filter(User.email == form_data.username).first()
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-mail ou senha inválidos",
         )
 
-    access_token = create_access_token(user_id=user.id, role=user.role)
-    return {"access_token": access_token, "token_type": "bearer"}
+    jwt_token = create_access_token(user_id=user.id, role=user.role)
 
+    return {
+        "access_token": jwt_token,
+        "token_type": "bearer",
+    }
+
+
+# ----------------------------------------------
+# USER INFO
+# ----------------------------------------------
 @router.get("/me", response_model=UserRead)
 def read_me(current_user: User = Depends(get_current_user)):
     return current_user
