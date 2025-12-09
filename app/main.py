@@ -2,9 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import health, chat
+from .routers import health, chat, auth
+from .database import Base, engine
 
 def create_app() -> FastAPI:
+    # cria as tabelas (para algo mais sério, depois usamos Alembic)
+    Base.metadata.create_all(bind=engine)
+
     app = FastAPI(title="Trading Agent Backend")
 
     app.add_middleware(
@@ -16,6 +20,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(chat.router)
 
     return app
