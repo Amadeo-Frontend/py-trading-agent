@@ -15,10 +15,18 @@ class Settings:
     )
 
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-me")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
+    )
+
+    # NOVO: seed do admin
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+    ADMIN_NAME: str = os.getenv("ADMIN_NAME", "Admin")
 
     @property
     def frontend_origins(self) -> list[str]:
         return [o.strip() for o in self.FRONTEND_ORIGINS_RAW.split(",") if o.strip()]
+
 
 settings = Settings()
