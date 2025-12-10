@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import health, chat, auth
+from .routers import health, chat, auth, admin
 from .database import Base, engine, SessionLocal
 from .core.security import hash_password
 from .models import User
@@ -60,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(chat.router)
+    app.include_router(admin.router)
 
     return app
 
