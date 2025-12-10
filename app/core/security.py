@@ -12,13 +12,10 @@ from ..config import settings
 from ..database import get_db
 from ..models import User
 
-# Senha
+# ==============================
+# Configurações de senha
+# ==============================
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# OAuth2 - URL do login
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
-ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
@@ -29,12 +26,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
+# ==============================
+# Configurações JWT
+# ==============================
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+ALGORITHM = "HS256"
+
+
 def create_access_token(
     user_id: int,
     role: str,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: Optional[timedelta] = None
 ) -> str:
-    """Gera JWT usado pelo NextAuth e pelo backend."""
+    """
+    Gera um JWT válido para NextAuth e backend.
+    """
+
     to_encode = {
         "sub": str(user_id),
         "role": role,
@@ -45,53 +53,67 @@ def create_access_token(
     )
     to_encode.update({"exp": expire})
 
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
     return encoded_jwt
 
 
 def _decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
         return payload
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Token inválido ou expirado",
         )
 
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+# ==============================
+# Dependências de autenticação
+# ==============================
+def get_current_user(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> User:
     payload = _decode_token(token)
     user_id = payload.get("sub")
 
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
+            detail="Token inválido",
         )
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="Usuário não encontrado",
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User inactive",
+            detail="Usuário inativo",
         )
 
     return user
 
 
 def get_current_admin_user(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ) -> User:
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin only",
+            detail="Acesso permitido apenas para administradores",
         )
     return current_user
