@@ -1,98 +1,97 @@
-from datetime import datetime, timedelta
+# app/core/security.py
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.models import User
-from app.database import SessionLocal
+from ..config import settings
+from ..database import get_db
+from ..models import User
 
-# ------------------------------
-# CONFIG JWT
-# ------------------------------
-
-SECRET_KEY = settings.SECRET_KEY
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-
+# Senha
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# OAuth2 - URL do login
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+ALGORITHM = "HS256"
 
-# ------------------------------
-# PASSWORD FUNCTIONS
-# ------------------------------
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 
-# ------------------------------
-# TOKEN
-# ------------------------------
-
-def create_access_token(user_id: int, role: str):
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    payload = {
+def create_access_token(
+    user_id: int,
+    role: str,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """Gera JWT usado pelo NextAuth e pelo backend."""
+    to_encode = {
         "sub": str(user_id),
         "role": role,
-        "exp": expire,
     }
 
-    encoded = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded
-
-
-# ------------------------------
-# CURRENT USER HELPERS
-# ------------------------------
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Valida JWT e retorna o usuário logado"""
-
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
+    to_encode.update({"exp": expire})
 
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def _decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        role: str = payload.get("role")
-
-        if user_id is None:
-            raise credentials_exception
-
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
     except JWTError:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
 
-    db = SessionLocal()
+
+def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+    payload = _decode_token(token)
+    user_id = payload.get("sub")
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
     user = db.query(User).filter(User.id == int(user_id)).first()
-    db.close()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
 
-    if not user or not user.is_active:
-        raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User inactive",
+        )
 
     return user
 
 
-def get_current_admin_user(current_user: User = Depends(get_current_user)):
-    """Permite acesso apenas para admin"""
-
+def get_current_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admins only",
+            detail="Admin only",
         )
-
     return current_user

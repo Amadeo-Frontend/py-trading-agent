@@ -1,26 +1,33 @@
+# app/schemas/admin.py
+from datetime import date, datetime
+from typing import List, Optional
+
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
 
 
 class AdminUser(BaseModel):
     id: int
     email: EmailStr
-    name: str | None
+    name: Optional[str]
     role: str
     is_active: bool
     created_at: datetime
+    last_login_at: Optional[datetime]
 
     class Config:
         from_attributes = True
 
 
-class UpdateRoleRequest(BaseModel):
-    role: str
+class AdminDailyLogin(BaseModel):
+    day: date
+    count: int
 
 
-class AdminStatsResponse(BaseModel):
+class AdminStats(BaseModel):
     total_users: int
-    pending_users: int
     active_users: int
-    total_admins: int
-    today_signups: int
+    admins: int
+    pending_users: int
+    logins_last_24h: int
+    logins_per_day: List[AdminDailyLogin]
+    last_users: List[AdminUser]
