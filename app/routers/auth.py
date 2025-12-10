@@ -1,19 +1,15 @@
-# app/routers/auth.py
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.core.security import (
-    verify_password,
-    create_access_token,
-    get_current_user,
-)
-
 from app.database import get_db
 from app.models import User, LoginEvent
 from app.schemas.auth import Token, UserRead
-
+from app.core.security import (
+    create_access_token,
+    verify_password,
+    get_current_user,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,41 +20,40 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-
+    # OAuth2PasswordRequestForm recebe username e password
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="E-mail ou senha inválidos",
+            detail="Credenciais inválidas",
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Usuário aguardando aprovação",
+            detail="Usuário inativo",
         )
 
-    # gera token
+    # TOKEN CORRETO!
     access_token = create_access_token(
         user_id=user.id,
         role=user.role,
     )
 
-    # registra evento de login
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-
+    # Registrar login
     event = LoginEvent(
         user_id=user.id,
-        ip=client_ip,
-        user_agent=user_agent,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
     )
-
     db.add(event)
     db.commit()
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
 
 
 @router.get("/me", response_model=UserRead)
