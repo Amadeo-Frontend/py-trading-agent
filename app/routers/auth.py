@@ -14,15 +14,13 @@ from app.core.security import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-# -------------------------------------------------------
-# LOGIN — USADO PELO NEXTAUTH
-# -------------------------------------------------------
 @router.post("/login", response_model=Token)
 def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    # Busca usuário pelo email
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user:
@@ -31,26 +29,27 @@ def login(
             detail="E-mail ou senha inválidos",
         )
 
-    # usa hashed_password correto
+    # Verifica senha corretamente
     if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-mail ou senha inválidos",
         )
 
+    # Só permite se ativo
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuário inativo",
         )
 
-    # cria JWT corretamente
+    # Cria token corretamente
     access_token = create_access_token(
         user_id=user.id,
         role=user.role,
     )
 
-    # registra evento de login
+    # Registra login
     event = LoginEvent(
         user_id=user.id,
         ip=request.client.host if request.client else None,
@@ -59,12 +58,12 @@ def login(
     db.add(event)
     db.commit()
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
 
 
-# -------------------------------------------------------
-# /auth/me — usado pelo NextAuth para obter dados do user
-# -------------------------------------------------------
 @router.get("/me", response_model=UserRead)
 def read_me(current_user: User = Depends(get_current_user)):
     return current_user
